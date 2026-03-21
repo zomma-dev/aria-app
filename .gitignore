@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build and packaging outputs
+dist/
+out/
+build/
+release/
+.vite/
+.turbo/
+coverage/
+test-results/
+playwright-report/
+artifacts/
+blob-report/
+*.tgz
+*.zip
+*.dmg
+*.app
+*.asar
+
+# TypeScript and caches
+*.tsbuildinfo
+.eslintcache
+.sass-cache/
+.cache/
+.tmp-cache/
+
+# Logs and temp files
+*.log
+*.log.*
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.tmp/
+tmp/
+logs/
+*.pid
+*.seed
+
+# Environment and local overrides
+.env
+.env.local
+.env.*.local
+.envrc
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Secrets and local tooling
+.claude/
+.tarko
+.mcp*_token
+.cursor/
+
+# Generated or local script artifacts
+scripts/merge-yml/*.yml
