@@ -35,6 +35,7 @@ import { FREE_MODEL_BASE_URL } from '../remote/shared';
 import { getAuthHeader } from '../remote/auth';
 import { ProxyClient } from '../remote/proxyClient';
 import { UITarsModelConfig } from '@ui-tars/sdk/core';
+import { runLocalPlannerRuntime } from './localPlannerRuntime';
 
 const modelApiField = `api${'Key'}` as const;
 
@@ -64,10 +65,26 @@ export const runAgent = async (
   const settings = SettingStore.getStore();
   const { instructions, abortController } = getState();
   assert(instructions, 'instructions is required');
+  const startTime = Date.now();
 
   const language = settings.language ?? 'en';
 
   logger.info('settings.operator', settings.operator);
+
+  if (settings.operator === Operator.LocalComputer) {
+    setState({
+      ...getState(),
+      status: StatusEnum.RUNNING,
+    });
+
+    await runLocalPlannerRuntime(setState, getState, settings);
+    logger.info(
+      '[runAgent Totoal cost]: ',
+      (Date.now() - startTime) / 1000,
+      's',
+    );
+    return;
+  }
 
   const handleData: GUIAgentConfig<NutJSElectronOperator>['onData'] = async ({
     data,
@@ -81,6 +98,7 @@ export const runAgent = async (
       conversations.map(async (conv) => {
         const { screenshotContext, predictionParsed } = conv;
         if (
+          settings.operator !== Operator.LocalComputer &&
           lastConv?.screenshotBase64 &&
           screenshotContext?.size &&
           predictionParsed
@@ -146,10 +164,6 @@ export const runAgent = async (
     | RemoteBrowserOperator;
 
   switch (settings.operator) {
-    case Operator.LocalComputer:
-      operator = new NutJSElectronOperator();
-      operatorType = 'computer';
-      break;
     case Operator.LocalBrowser:
       await checkBrowserAvailability();
       const { browserAvailable } = getState();
@@ -223,10 +237,21 @@ export const runAgent = async (
     language,
     operatorType,
   );
+  const taskHintsMarkdown = settings.taskHintsMarkdown?.trim();
+  const systemPromptWithHints = taskHintsMarkdown
+    ? [
+        systemPrompt,
+        '## Reusable Task Hints',
+        'Use the following markdown as reusable task guidance. Adapt it to the current user instruction and current screen. Prefer these patterns when they help, but do not blindly follow them if the current task differs.',
+        '```md',
+        taskHintsMarkdown,
+        '```',
+      ].join('\n\n')
+    : systemPrompt;
 
   const guiAgent = new GUIAgent({
     model: modelConfig,
-    systemPrompt: systemPrompt,
+    systemPrompt: systemPromptWithHints,
     logger,
     signal: abortController?.signal,
     operator: operator!,
@@ -249,7 +274,7 @@ export const runAgent = async (
         maxRetries: 5,
       },
       screenshot: {
-        maxRetries: 5,
+        maxRetries: 0,
       },
       execute: {
         maxRetries: 1,
@@ -266,8 +291,6 @@ export const runAgent = async (
   const { sessionHistoryMessages } = getState();
 
   beforeAgentRun(settings.operator);
-
-  const startTime = Date.now();
 
   await guiAgent
     .run(instructions, sessionHistoryMessages, modelAuthHdrs)

@@ -26,6 +26,7 @@ export const DEFAULT_SETTING: LocalStore = {
   vlmModelName: env.vlmModelName || '',
   useResponsesApi: false,
   forceWorkflowMode: ForceWorkflowMode.auto,
+  taskHintsMarkdown: '',
   maxLoopCount: 100,
   loopIntervalInMs: 1000,
   searchEngineForBrowser: SearchEngineForSettings.GOOGLE,

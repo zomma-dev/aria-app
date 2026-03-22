@@ -30,6 +30,7 @@ import {
 import { Input } from '@renderer/components/ui/input';
 import { Switch } from '@renderer/components/ui/switch';
 import { Alert, AlertDescription } from '@renderer/components/ui/alert';
+import { Textarea } from '@renderer/components/ui/textarea';
 import { cn } from '@renderer/utils';
 
 import { PresetImport, PresetBanner } from './preset';
@@ -63,6 +64,7 @@ const formSchema = z.object({
   forceWorkflowMode: z
     .nativeEnum(ForceWorkflowMode)
     .default(ForceWorkflowMode.auto),
+  taskHintsMarkdown: z.string().default(''),
 });
 
 export interface VLMSettingsRef {
@@ -101,6 +103,7 @@ export function VLMSettings({
       vlmModelName: '',
       useResponsesApi: false,
       forceWorkflowMode: ForceWorkflowMode.auto,
+      taskHintsMarkdown: '',
     },
   });
   useEffect(() => {
@@ -112,6 +115,7 @@ export function VLMSettings({
         vlmModelName: settings.vlmModelName,
         useResponsesApi: settings.useResponsesApi,
         forceWorkflowMode: settings.forceWorkflowMode ?? ForceWorkflowMode.auto,
+        taskHintsMarkdown: settings.taskHintsMarkdown ?? '',
       });
     }
   }, [settings, form]);
@@ -123,6 +127,7 @@ export function VLMSettings({
     newModelName,
     newUseResponsesApi,
     newForceWorkflowMode,
+    newTaskHintsMarkdown,
   ] = form.watch([
     'vlmProvider',
     'vlmBaseUrl',
@@ -130,6 +135,7 @@ export function VLMSettings({
     'vlmModelName',
     'useResponsesApi',
     'forceWorkflowMode',
+    'taskHintsMarkdown',
   ]);
 
   useEffect(() => {
@@ -193,6 +199,17 @@ export function VLMSettings({
           forceWorkflowMode: newForceWorkflowMode,
         });
       }
+
+      const isTaskHintsValid = await form.trigger('taskHintsMarkdown');
+      if (
+        isTaskHintsValid &&
+        newTaskHintsMarkdown !== settings.taskHintsMarkdown
+      ) {
+        updateSetting({
+          ...settings,
+          taskHintsMarkdown: newTaskHintsMarkdown,
+        });
+      }
     };
 
     validAndSave();
@@ -204,6 +221,7 @@ export function VLMSettings({
     newModelName,
     newUseResponsesApi,
     newForceWorkflowMode,
+    newTaskHintsMarkdown,
     settings,
     updateSetting,
     form,
@@ -528,6 +546,31 @@ export function VLMSettings({
                 </FormItem>
               );
             }}
+          />
+
+          <FormField
+            control={form.control}
+            name="taskHintsMarkdown"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Reusable Task Hints</FormLabel>
+                <FormControl>
+                  <Textarea
+                    className="min-h-[180px] bg-white"
+                    placeholder={
+                      '# Example\n- Prefer Terminal for file and folder tasks.\n- To open a Desktop folder, use Spotlight to open Terminal, then run `open ~/Desktop/<folder-name>`.\n- If asked to click an image inside a folder, open the folder first, then switch to GUI navigation for the specific item.'
+                    }
+                    {...field}
+                    disabled={isRemoteAutoUpdatedPreset}
+                  />
+                </FormControl>
+                <p className="text-sm text-muted-foreground">
+                  Markdown notes sent with every run as reusable context. Keep
+                  this general enough to help similar tasks on retries without
+                  hardcoding one exact prompt.
+                </p>
+              </FormItem>
+            )}
           />
         </form>
       </Form>

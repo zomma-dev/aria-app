@@ -4,14 +4,11 @@
  */
 import { screen } from 'electron';
 
-import * as env from '@main/env';
-
 export const getScreenSize = () => {
   const primaryDisplay = screen.getPrimaryDisplay();
 
   const logicalSize = primaryDisplay.size; // Logical = Physical / scaleX
-  // Mac retina display scaleFactor = 1
-  const scaleFactor = env.isMacOS ? 1 : primaryDisplay.scaleFactor;
+  const scaleFactor = primaryDisplay.scaleFactor || 1;
 
   const physicalSize = {
     width: Math.round(logicalSize.width * scaleFactor),

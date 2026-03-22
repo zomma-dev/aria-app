@@ -1,13 +1,16 @@
 import { MessageCirclePlus, Settings2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { Button } from '@renderer/components/ui/button';
 import { SidebarTrigger, useSidebar } from '@renderer/components/ui/sidebar';
 import { NavHeader } from '@renderer/components/Detail/NavHeader';
 import { ScrollArea } from '@renderer/components/ui/scroll-area';
+import { Textarea } from '@renderer/components/ui/textarea';
 
 import { useStore } from '@renderer/hooks/useStore';
+import { useSetting } from '@renderer/hooks/useSetting';
 import { useSession } from '@renderer/hooks/useSession';
 import Prompts from '../../components/Prompts';
 import { IMAGE_PLACEHOLDER } from '@ui-tars/shared/constants';
@@ -61,11 +64,103 @@ const OPERATOR_META = {
   },
 };
 
+const cleanTypedContent = (value?: string) =>
+  (value || '').replace(/\\n/g, '\n').replace(/\n+/g, '\n').trim();
+
+const toQuotedInline = (value: string) => `\`${value.replace(/`/g, '\\`')}\``;
+
+const buildTaskHintsDraft = (instruction: string, runMessages: any[]) => {
+  const normalizedInstruction = instruction.trim();
+  const actionSteps = runMessages.flatMap(
+    (message) => message.predictionParsed || [],
+  );
+
+  if (!normalizedInstruction || actionSteps.length === 0) {
+    return '';
+  }
+
+  const typedCommands = actionSteps
+    .filter((step) => step.action_type === 'type')
+    .map((step) => cleanTypedContent(step.action_inputs?.content))
+    .filter(Boolean);
+  const hotkeys = actionSteps
+    .filter((step) => step.action_type === 'hotkey')
+    .map((step) => cleanTypedContent(step.action_inputs?.key))
+    .filter(Boolean);
+  const thoughtHints = actionSteps
+    .map((step) => step.thought?.trim())
+    .filter(Boolean)
+    .filter((thought, index, list) => list.indexOf(thought) === index)
+    .slice(0, 3);
+  const uniqueCommands = typedCommands.filter(
+    (command, index, list) => list.indexOf(command) === index,
+  );
+  const uniqueHotkeys = hotkeys.filter(
+    (command, index, list) => list.indexOf(command) === index,
+  );
+
+  const adaptationHints: string[] = [];
+  if (
+    /desktop/i.test(normalizedInstruction) ||
+    uniqueCommands.some((cmd) => /Desktop/i.test(cmd))
+  ) {
+    adaptationHints.push(
+      '- For another Desktop folder, keep the same flow and swap only the folder name or path.',
+    );
+  }
+  if (/folder/i.test(normalizedInstruction)) {
+    adaptationHints.push(
+      '- If the task changes from opening a folder to opening a file inside it, open the folder first, then switch to GUI actions for the specific item.',
+    );
+  }
+
+  return [
+    `# Reusable Task Hints`,
+    ``,
+    `## Goal Pattern`,
+    `- Base task: ${normalizedInstruction}`,
+    `- Prefer Terminal and keyboard-first actions for file and folder tasks before using coordinate-based clicks.`,
+    ``,
+    `## Reusable Sequence`,
+    ...(uniqueHotkeys.length
+      ? uniqueHotkeys.map(
+          (hotkey) =>
+            `- Use ${toQuotedInline(`hotkey(key='${hotkey}')`)} when the same keyboard shortcut applies.`,
+        )
+      : [
+          '- Prefer keyboard shortcuts such as Spotlight before mouse navigation.',
+        ]),
+    ...(uniqueCommands.length
+      ? uniqueCommands.map(
+          (command) =>
+            `- Reuse ${toQuotedInline(command)} when the target is similar; change only the folder, file name, or path.`,
+        )
+      : [
+          '- If Terminal is already focused, type the minimum command needed instead of navigating Finder manually.',
+        ]),
+    ``,
+    `## Observations`,
+    ...(thoughtHints.length
+      ? thoughtHints.map((thought) => `- ${thought}`)
+      : [
+          '- Keep the next action short and explicit so the agent can stay on the fast path.',
+        ]),
+    ``,
+    `## Adaptation Rules`,
+    ...(adaptationHints.length
+      ? adaptationHints
+      : [
+          '- Adjust names and paths for the new task, but keep the same general keyboard-first workflow when it still fits.',
+        ]),
+  ].join('\n');
+};
+
 const LocalOperator = () => {
   const state = useLocation().state as RouterState;
   const navigate = useNavigate();
   const { setOpen } = useSidebar();
   const { openSettings } = useGlobalSettings();
+  const { settings, updateSetting } = useSetting();
 
   const {
     status,
@@ -89,6 +184,8 @@ const LocalOperator = () => {
   const [pendingAction, setPendingAction] = useState<'newChat' | 'back' | null>(
     null,
   );
+  const [hintDraft, setHintDraft] = useState('');
+  const [hintDraftKey, setHintDraftKey] = useState('');
   const [isNavDialogOpen, setNavDialogOpen] = useState(false);
   const [localOpen, setLocalOpen] = useState(false);
   const operatorMeta =
@@ -147,6 +244,54 @@ const LocalOperator = () => {
       containerRef.current?.scrollIntoView(false);
     }, 100);
   }, [messages, thinking, errorMsg]);
+
+  useEffect(() => {
+    if (status !== StatusEnum.END) {
+      return;
+    }
+
+    const effectiveInstruction =
+      instructions?.trim() ||
+      [...messages]
+        .reverse()
+        .find(
+          (message) =>
+            message?.from === 'human' && message?.value !== IMAGE_PLACEHOLDER,
+        )
+        ?.value?.trim() ||
+      '';
+
+    const latestActionMessage = [...messages]
+      .reverse()
+      .find(
+        (message) =>
+          message?.from === 'gpt' && message?.predictionParsed?.length,
+      );
+
+    const draftKey = [
+      effectiveInstruction,
+      latestActionMessage?.timing?.end ||
+        latestActionMessage?.timing?.start ||
+        '',
+      messages.length,
+    ].join('::');
+
+    if (
+      !effectiveInstruction ||
+      !latestActionMessage ||
+      draftKey === hintDraftKey
+    ) {
+      return;
+    }
+
+    const draft = buildTaskHintsDraft(effectiveInstruction, messages);
+    if (!draft) {
+      return;
+    }
+
+    setHintDraft(draft);
+    setHintDraftKey(draftKey);
+  }, [status, instructions, messages, hintDraftKey]);
 
   const handleSelect = async (suggestion: string) => {
     await api.setInstructions({ instructions: suggestion });
@@ -224,6 +369,25 @@ const LocalOperator = () => {
 
   const handleLocalSettingsClose = () => {
     setLocalOpen(false);
+  };
+
+  const saveHintDraft = async (mode: 'replace' | 'append') => {
+    const nextDraft = hintDraft.trim();
+    if (!nextDraft) {
+      return;
+    }
+
+    const existing = settings.taskHintsMarkdown?.trim() || '';
+    const merged =
+      mode === 'append' && existing
+        ? `${existing}\n\n---\n\n${nextDraft}`
+        : nextDraft;
+
+    await updateSetting({ taskHintsMarkdown: merged });
+    setHintDraft('');
+    toast.success(
+      mode === 'append' ? 'Reusable hints appended' : 'Reusable hints replaced',
+    );
   };
 
   const checkVLM = async () => {
@@ -352,6 +516,49 @@ const LocalOperator = () => {
             <div className="min-h-0 flex-1 border-t border-border/70">
               {renderChatList()}
             </div>
+            {hintDraft ? (
+              <div className="border-t border-border/70 bg-stone-50/80 px-4 py-4">
+                <div className="mb-3 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                      Reusable Hints Draft
+                    </p>
+                    <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
+                      Generated from the latest completed run. Edit it, then
+                      append or replace the reusable hints sent with future
+                      tasks.
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setHintDraft('')}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+                <Textarea
+                  className="min-h-[220px] bg-white"
+                  value={hintDraft}
+                  onChange={(event) => setHintDraft(event.target.value)}
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" onClick={() => saveHintDraft('append')}>
+                    Append To Hints
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => saveHintDraft('replace')}
+                  >
+                    Replace Hints
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={openSettings}>
+                    Open Settings
+                  </Button>
+                </div>
+              </div>
+            ) : null}
             <div className="border-t border-border/70 px-2 py-2">
               <ChatInput
                 disabled={false}

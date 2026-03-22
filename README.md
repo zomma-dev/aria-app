@@ -1,64 +1,136 @@
-# Zomma
+# Aria App
 
-Zomma is a local-first desktop operator for grounded computer use. It is a product fork of the original [UI-TARS Desktop](https://github.com/bytedance/UI-TARS-desktop) project, adapted for backend-directed workflow routing, graph-aware execution, and post-run feedback.
+Aria App is a local-first desktop agent forked from [UI-TARS Desktop](https://github.com/bytedance/UI-TARS-desktop). The main change in this fork is a shift away from a pure screenshot-to-click loop for Local Computer tasks and toward a typed planner/executor runtime.
 
-The current focus of this repo is a hackathon demo and integration path for a grounded computer-use agent:
+The current direction is:
 
-- `baseline`: normal agent behavior, no graph assist
-- `grounded`: backend agent decides whether to retrieve and use a graph
+- keep execution and verification in the Electron desktop app
+- use deterministic local tools first for Finder, Terminal, and filesystem tasks
+- use the sibling backend as a planner that returns one typed next step at a time
+- fall back to user clarification instead of guessing or looping blindly
 
-Demo task:
+## What Changed
 
-> Find the Uber receipt in Downloads and create an expense report spreadsheet.
+The main Local Computer path has been rebuilt around a planner/executor flow:
+
+- `aria-app` gathers structured local state such as:
+  - frontmost app
+  - Desktop entries
+  - Finder front window path
+  - recent step history
+- the desktop app tries deterministic planning first for simple local file and folder tasks
+- when local planning is insufficient, it calls the sibling backend `POST /v1/plan-step`
+- the backend returns one typed planner step such as:
+  - `open_path`
+  - `focus_app`
+  - `run_terminal_command`
+  - `search_path`
+  - `wait_for`
+  - `ask_user`
+  - `finish`
+- the desktop app executes and verifies that step locally
+
+This replaces the old default pattern for Local Computer:
+
+```txt
+screenshot -> VLM -> parse low-level action -> execute -> screenshot
+```
+
+That older loop still exists in inherited packages and compatibility paths, but Local Computer is now being moved to the planner/executor runtime first.
+
+## Current Architecture
+
+The desktop app now owns:
+
+- local execution
+- local verification
+- OS-level tool adapters
+- reusable run history and hints
+
+The sibling backend currently owns:
+
+- planner reasoning for non-trivial next-step selection
+- a compatibility `POST /v1/chat/completions` path for older UI-TARS flows
+- `POST /v1/feedback`
+
+The current Local Computer runtime is intentionally narrow. It is meant to be strong first on local file and folder tasks, not broad autonomous desktop workflows.
 
 ## Current Scope
 
-This repo currently covers:
+This repo currently includes:
 
 - the Electron desktop app in [`apps/ui-tars`](./apps/ui-tars)
-- the Zomma renderer branding and local-first UI
-- integration with a backend that exposes an OpenAI-compatible VLM endpoint
-- optional post-run feedback capture
-- a local stub backend for frontend testing
+- the Local Computer planner/executor runtime
+- reusable markdown hints injected into planner context
+- input-only speech-to-text in the composer
+- a sibling Python backend in `../backend`
 
-The desktop does not decide:
+## Local Computer Runtime
 
-- whether a workflow has been seen before
-- whether a query is similar enough to use a graph
-- whether grounded behavior should fall back
+For Local Computer, the preferred flow is now:
 
-Those decisions are owned by the backend.
+1. collect structured local state
+2. choose a deterministic next step locally when possible
+3. otherwise call the backend planner for one typed next step
+4. execute locally
+5. verify using tool state first
+6. ask the user instead of repeating unsafe or low-confidence loops
 
-## Product Contract
+Examples of tasks this runtime is meant to handle first:
 
-Default behavior:
+- open a folder on Desktop
+- open a known file on Desktop
+- open a known file inside a known folder
+- focus Finder or Terminal
+- run a short, safe terminal command
 
-- desktop sends the task normally
-- backend decides whether the workflow is new, seen, or should use graph assistance
+Examples of tasks that are not yet first-class in this runtime:
 
-Optional demo/debug override:
+- arbitrary multi-step scripting
+- document extraction pipelines
+- open-ended receipt parsing or CSV generation
+- broad visual desktop automation that depends on repeated screenshot reasoning
 
-- desktop exposes a `Force Workflow Mode` toggle in settings
-- when enabled, desktop sends `X-Force-Workflow-Mode: baseline` or `X-Force-Workflow-Mode: grounded`
-- when disabled, no force header is sent and backend owns routing
+When a task falls outside the current deterministic/tool-backed path, the runtime should degrade to `ask_user` rather than inventing a long shell script.
 
-Feedback is not required to make grounded mode work. It is only used to collect signal and improve future behavior.
+## Reusable Hints
 
-The backend contract is documented in [`docs/cash-api-contract.md`](./docs/cash-api-contract.md).
+The app supports reusable markdown hints in settings.
+
+These hints are:
+
+- stored locally in settings
+- injected into planner context on future runs
+- editable manually
+- draftable from successful runs in the Local Computer UI
+
+The intent is to capture reusable operational guidance, not brittle screenshot-specific instructions or exact coordinates.
+
+## Voice Input
+
+The composer includes input-only speech-to-text support:
+
+- record from the mic
+- transcribe with ElevenLabs from Electron main
+- optionally clean the transcript into a clearer desktop task prompt
+- insert the result into the normal text composer
+
+This feature is prompt input only. It does not narrate execution.
 
 ## Repo Layout
 
-- [`apps/ui-tars`](./apps/ui-tars): Electron desktop app used for Zomma
-- [`packages/ui-tars`](./packages/ui-tars): shared SDK and parsing packages inherited from the upstream stack
-- [`docs/hackathon-plan.md`](./docs/hackathon-plan.md): implementation notes and demo runbook
-- [`docs/cash-api-contract.md`](./docs/cash-api-contract.md): backend API contract
-- [`scripts/cash_stub.py`](./scripts/cash_stub.py): local stub backend for frontend testing
+- [`apps/ui-tars`](./apps/ui-tars): Electron desktop app
+- [`packages/ui-tars`](./packages/ui-tars): inherited SDK, parser, and shared packages from upstream
+- [`docs/cash-api-contract.md`](./docs/cash-api-contract.md): earlier backend contract notes
+- [`docs/hackathon-plan.md`](./docs/hackathon-plan.md): earlier implementation notes
+- [`scripts/run_backend.sh`](./scripts/run_backend.sh): starts the sibling backend in `../backend`
 
 ## Requirements
 
-- macOS for the current local operator workflow
+- macOS for the current local-desktop flow
 - Node.js `>=20`
 - `pnpm` via Corepack
+- Python 3 for the sibling backend
 - Accessibility and Screen Recording permissions
 
 ## Local Development
@@ -68,10 +140,11 @@ From the repo root:
 ```bash
 corepack enable
 corepack pnpm install
+corepack pnpm run dev:backend
 corepack pnpm run dev:ui-tars
 ```
 
-If the root dev script is noisy:
+If you want to run only the desktop app package:
 
 ```bash
 cd apps/ui-tars
@@ -81,55 +154,66 @@ corepack pnpm run dev
 
 ## Backend Setup
 
-In the app settings, use:
+The app expects a sibling backend checkout:
 
-- Provider: `Hugging Face for UI-TARS-1.5`
+```txt
+./aria-app
+./backend
+```
+
+Run it from the `aria-app` repo root:
+
+```bash
+corepack pnpm run dev:backend
+```
+
+That forwards to:
+
+```bash
+../backend/run.sh
+```
+
+The backend uses `../backend/.env`. At minimum, it currently expects:
+
+- `ANTHROPIC_API_KEY`
+- `VLM_MODEL=claude-sonnet-4-6` or another allowed backend model
+
+## Desktop App Settings
+
+Use these settings in the desktop app:
+
 - Base URL: `http://127.0.0.1:8000/v1`
 - API Key: `dummy-key`
 - Model name: `cuakg-default`
 
-Use `Force Workflow Mode` only when you want deterministic demo behavior:
+The Local Computer runtime now uses:
 
-- Off: backend-owned auto mode
-- On + Baseline: force baseline behavior
-- On + Grounded: force grounded behavior
+- `POST /v1/plan-step` for planner-style local execution
+- `POST /v1/chat/completions` only for compatibility with older paths
+- `POST /v1/feedback` for feedback submission
 
-## Local Stub
-
-Run the stub backend from the repo root:
-
-```bash
-python3 scripts/cash_stub.py
-```
-
-Then point the app to:
-
-```txt
-http://127.0.0.1:8000/v1
-```
-
-You should be able to:
-
-- start a local run
-- see `POST /v1/chat/completions` hit the stub
-- complete the run
-- submit feedback
-- see `POST /v1/feedback` hit the stub
+`Force Workflow Mode` is still present in inherited settings, but the new Local Computer runtime is no longer designed around graph-vs-baseline routing for simple local tasks.
 
 ## macOS Permissions
 
-Enable both of these in `System Settings > Privacy & Security`:
+Enable both in `System Settings > Privacy & Security`:
 
 - Accessibility
 - Screen Recording
 
-During local development, macOS may associate those permissions with either the Electron dev app or your terminal app.
+During development, macOS may attribute these permissions to either:
+
+- the Electron dev app
+- your terminal app
+
+If local automation fails, fully restart both the terminal and the app after changing permissions.
 
 ## Useful Commands
 
 From the repo root:
 
 ```bash
+corepack pnpm run dev:backend
 corepack pnpm run dev:ui-tars
 corepack pnpm test
 corepack pnpm lint
@@ -139,12 +223,13 @@ From [`apps/ui-tars`](./apps/ui-tars):
 
 ```bash
 pnpm run dev
-pnpm run typecheck:web
+pnpm run typecheck
 pnpm run test
 ```
 
 ## Notes
 
-- This repo started as a fork of UI-TARS Desktop and still contains inherited packages and infrastructure from the upstream workspace.
-- The current Zomma product direction is local-first, with remote routes de-emphasized in the UI.
+- This repo still contains inherited upstream packages and older UI-TARS execution paths.
+- The Local Computer planner/executor runtime is the main active architecture change.
+- Some screenshot-loop code is still present as compatibility or fallback logic and has not been fully removed yet.
 - Persisted Electron settings can override `.env` defaults on machines that have already run the app.

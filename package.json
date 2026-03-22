@@ -9,6 +9,7 @@
   "scripts": {
     "commit": "oco",
     "bootstrap": "pnpm i",
+    "dev:backend": "bash scripts/run_backend.sh",
     "dev:ui-tars": "turbo run ui-tars-desktop#dev",
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",

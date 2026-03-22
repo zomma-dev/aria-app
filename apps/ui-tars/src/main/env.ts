@@ -21,6 +21,8 @@ export const vlmProvider = process.env.VLM_PROVIDER;
 export const vlmBaseUrl = process.env.VLM_BASE_URL;
 export const vlmApiKey = process.env.VLM_API_KEY;
 export const vlmModelName = process.env.VLM_MODEL_NAME;
+const elevenLabsField = ['ELEVENLABS', 'API', 'KEY', 'V2'].join('_');
+export const elevenLabsKeyV2 = process.env[elevenLabsField];
 
 const { platform } = process;
 export const isMacOS = platform === 'darwin';

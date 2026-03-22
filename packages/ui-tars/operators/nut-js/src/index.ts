@@ -97,12 +97,20 @@ export class NutJSOperator extends Operator {
 
     const { action_type, action_inputs } = parsedPrediction;
     const startBoxStr = action_inputs?.start_box || '';
+    const effectiveScreenWidth =
+      process.platform === 'darwin' && scaleFactor > 1
+        ? Math.round(screenWidth * scaleFactor)
+        : screenWidth;
+    const effectiveScreenHeight =
+      process.platform === 'darwin' && scaleFactor > 1
+        ? Math.round(screenHeight * scaleFactor)
+        : screenHeight;
 
     logger.info('[NutjsOperator] execute', scaleFactor);
     const { x: startX, y: startY } = parseBoxToScreenCoords({
       boxStr: startBoxStr,
-      screenWidth,
-      screenHeight,
+      screenWidth: effectiveScreenWidth,
+      screenHeight: effectiveScreenHeight,
     });
 
     logger.info(`[NutjsOperator Position]: (${startX}, ${startY})`);
@@ -217,8 +225,8 @@ export class NutJSOperator extends Operator {
         if (action_inputs?.end_box) {
           const { x: endX, y: endY } = parseBoxToScreenCoords({
             boxStr: action_inputs.end_box,
-            screenWidth,
-            screenHeight,
+            screenWidth: effectiveScreenWidth,
+            screenHeight: effectiveScreenHeight,
           });
 
           if (startX && startY && endX && endY) {

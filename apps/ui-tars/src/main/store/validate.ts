@@ -28,6 +28,7 @@ export const PresetSchema = z.object({
   forceWorkflowMode: z
     .nativeEnum(ForceWorkflowMode)
     .default(ForceWorkflowMode.auto),
+  taskHintsMarkdown: z.string().optional(),
 
   // Chat Settings
   operator: z.nativeEnum(Operator),
