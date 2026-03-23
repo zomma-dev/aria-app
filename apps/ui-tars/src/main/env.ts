@@ -8,6 +8,22 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const parseBooleanEnv = (value: string | undefined): boolean | undefined => {
+  if (value == null) {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  return undefined;
+};
+
 export const mode = process.env.NODE_ENV;
 export const isProd = mode === 'production';
 export const isDev = mode === 'development';
@@ -21,6 +37,11 @@ export const vlmProvider = process.env.VLM_PROVIDER;
 export const vlmBaseUrl = process.env.VLM_BASE_URL;
 export const vlmApiKey = process.env.VLM_API_KEY;
 export const vlmModelName = process.env.VLM_MODEL_NAME;
+export const vlmUseResponsesApi = parseBooleanEnv(
+  process.env.VLM_USE_RESPONSES_API,
+);
+export const bootstrapVlmSettings =
+  parseBooleanEnv(process.env.UI_TARS_BOOTSTRAP_VLM_SETTINGS) ?? false;
 
 const { platform } = process;
 export const isMacOS = platform === 'darwin';

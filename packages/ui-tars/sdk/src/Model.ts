@@ -38,6 +38,27 @@ type OpenAIChatCompletionCreateParams = Omit<ClientOptions, 'maxRetries'> &
     'model' | 'max_tokens' | 'temperature' | 'top_p'
   >;
 
+const DEFAULT_MODEL_TIMEOUT_MS = 300_000;
+
+const parseModelTimeoutMs = () => {
+  const raw =
+    typeof process === 'undefined'
+      ? undefined
+      : process.env.UI_TARS_MODEL_TIMEOUT_MS;
+  if (!raw) {
+    return DEFAULT_MODEL_TIMEOUT_MS;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_MODEL_TIMEOUT_MS;
+  }
+
+  return parsed;
+};
+
+const MODEL_TIMEOUT_MS = parseModelTimeoutMs();
+
 const extractBackendMeta = (
   result: unknown,
 ): BackendWorkflowMeta | undefined => {
@@ -238,7 +259,7 @@ export class UITarsModel extends Model {
 
         result = await openai.responses.create(responseParams, {
           ...options,
-          timeout: 1000 * 30,
+          timeout: MODEL_TIMEOUT_MS,
           headers,
         });
         logger.info('[ResponseAPI] [result]: ', result);
@@ -276,7 +297,7 @@ export class UITarsModel extends Model {
       createCompletionPramsThinkingVp,
       {
         ...options,
-        timeout: 1000 * 30,
+        timeout: MODEL_TIMEOUT_MS,
         headers,
       },
     );

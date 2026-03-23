@@ -24,7 +24,7 @@ export const DEFAULT_SETTING: LocalStore = {
   vlmBaseUrl: env.vlmBaseUrl || '',
   vlmApiKey: env.vlmApiKey || '',
   vlmModelName: env.vlmModelName || '',
-  useResponsesApi: false,
+  useResponsesApi: env.vlmUseResponsesApi ?? false,
   forceWorkflowMode: ForceWorkflowMode.auto,
   maxLoopCount: 100,
   loopIntervalInMs: 1000,
@@ -78,6 +78,24 @@ export class SettingStore {
 
   public static getStore(): LocalStore {
     return SettingStore.getInstance().store;
+  }
+
+  public static applyBootstrapVlmSettings(): void {
+    if (!env.bootstrapVlmSettings) {
+      return;
+    }
+
+    const current = SettingStore.getStore();
+    const next: LocalStore = {
+      ...current,
+      vlmProvider: (env.vlmProvider as VLMProviderV2) || current.vlmProvider,
+      vlmBaseUrl: env.vlmBaseUrl || current.vlmBaseUrl,
+      vlmApiKey: env.vlmApiKey || current.vlmApiKey,
+      vlmModelName: env.vlmModelName || current.vlmModelName,
+      useResponsesApi: env.vlmUseResponsesApi ?? current.useResponsesApi,
+    };
+
+    SettingStore.setStore(next);
   }
 
   public static clear(): void {

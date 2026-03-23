@@ -26,6 +26,8 @@ blob-report/
 .sass-cache/
 .cache/
 .tmp-cache/
+__pycache__/
+*.py[cod]
 
 # Logs and temp files
 *.log

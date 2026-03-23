@@ -58,8 +58,7 @@ const loadDevDebugTools = async () => {
 
   import('electron-devtools-installer')
     .then(({ default: installExtensionDefault, REACT_DEVELOPER_TOOLS }) => {
-      // @ts-ignore
-      const installExtension = installExtensionDefault?.default;
+      const installExtension = installExtensionDefault;
       const extensions = [installExtension(REACT_DEVELOPER_TOOLS)];
 
       return Promise.all(extensions)
@@ -74,6 +73,7 @@ const loadDevDebugTools = async () => {
 const initializeApp = async () => {
   const isAccessibilityEnabled = app.isAccessibilitySupportEnabled();
   logger.info('isAccessibilityEnabled', isAccessibilityEnabled);
+  SettingStore.applyBootstrapVlmSettings();
   if (env.isMacOS) {
     app.setAccessibilitySupportEnabled(true);
     const { ensurePermissions } = await import('@main/utils/systemPermissions');

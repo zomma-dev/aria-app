@@ -46,13 +46,19 @@ Feedback is not required to make grounded mode work. It is only used to collect 
 
 The backend contract is documented in [`docs/cash-api-contract.md`](./docs/cash-api-contract.md).
 
+If you want to run this app against the sibling `desktop-agent` and `kg-agent`
+projects instead of the local stub, use the bridge runbook in
+[`docs/desktop-agent-bridge.md`](./docs/desktop-agent-bridge.md).
+
 ## Repo Layout
 
 - [`apps/ui-tars`](./apps/ui-tars): Electron desktop app used for Zomma
 - [`packages/ui-tars`](./packages/ui-tars): shared SDK and parsing packages inherited from the upstream stack
 - [`docs/hackathon-plan.md`](./docs/hackathon-plan.md): implementation notes and demo runbook
 - [`docs/cash-api-contract.md`](./docs/cash-api-contract.md): backend API contract
+- [`docs/desktop-agent-bridge.md`](./docs/desktop-agent-bridge.md): run UI-TARS against `desktop-agent` with optional `kg-agent` grounding
 - [`scripts/cash_stub.py`](./scripts/cash_stub.py): local stub backend for frontend testing
+- [`scripts/run_ui_tars_windows.sh`](./scripts/run_ui_tars_windows.sh): one-command local verification launcher for WSL + Windows app development
 
 ## Requirements
 
@@ -115,6 +121,51 @@ You should be able to:
 - complete the run
 - submit feedback
 - see `POST /v1/feedback` hit the stub
+
+## Desktop-Agent Bridge
+
+If you want the Electron app to drive your local `desktop-agent` policy instead
+of the safe stub, first install the Python backends into the same environment:
+
+```bash
+python3 -m pip install -e /path/to/desktop-agent
+python3 -m pip install -e /path/to/kg-agent
+```
+
+Then start the packaged bridge:
+
+```bash
+desktop-agent-bridge \
+  --model-provider moonshot \
+  --controller-model kimi-k2.5 \
+  --auto-mode grounded
+```
+
+If you are working from sibling checkouts and want explicit repo paths, you can
+still pass:
+
+```bash
+desktop-agent-bridge \
+  --desktop-agent-path /path/to/desktop-agent \
+  --kg-agent-path /path/to/kg-agent \
+  --model-provider moonshot \
+  --controller-model kimi-k2.5 \
+  --auto-mode grounded
+```
+
+Then point the app to:
+
+```txt
+http://127.0.0.1:8000/v1
+```
+
+Use `Force Workflow Mode` in the app settings for deterministic comparisons:
+
+- `baseline`: `desktop-agent` without KG
+- `grounded`: `desktop-agent` with `kg-agent`
+
+See [`docs/desktop-agent-bridge.md`](./docs/desktop-agent-bridge.md) for the
+full setup, including Neo4j and graph-memory requirements.
 
 ## macOS Permissions
 
