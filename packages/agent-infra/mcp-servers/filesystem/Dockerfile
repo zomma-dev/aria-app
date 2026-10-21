@@ -1,4 +1,4 @@
-FROM node:22.12-alpine AS builder
+FROM node:22.23.4-alpine@sha256:ce8d97f7cfc7c5386421eb932df20a29df99b1a7f469f6157d5c9956702ffadc AS builder
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ RUN --mount=type=cache,target=/root/.npm npm install
 RUN --mount=type=cache,target=/root/.npm-production npm ci --ignore-scripts --omit-dev
 
 
-FROM node:22-alpine AS release
+FROM node:22.23.4-alpine@sha256:ce8d97f7cfc7c5386421eb932df20a29df99b1a7f469f6157d5c9956702ffadc AS release
 
 WORKDIR /app
 
